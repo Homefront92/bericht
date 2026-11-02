@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Prüfbericht</title>
+<!--
+  Birnen-Tool: Berichtsseite. Eine einzelne Datei ohne externe Inhalte.
+  Der Bericht steckt im Teil der Adresse hinter dem Doppelkreuz (#). Browser senden diesen Teil nicht an den
+  Server: Der Webspace sieht nur, dass die Seite aufgerufen wurde, nicht den Inhalt des Berichts.
+  SPDX-License-Identifier: GPL-3.0-or-later  ·  Copyright (C) 2026 Niclas Syma
+-->
+<style>
+  :root { --bg:#F4F5F8; --card:#FFFFFF; --text:#1A1D24; --muted:#6A7280; --line:#DFE3EA;
+          --ok:#1E9E5A; --warn:#D9820B; --bad:#D64545; --unk:#7A8290; --accent:#3C7A1C; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161B; --card:#1B1E25; --text:#EDEFF4; --muted:#9AA1AF; --line:#2A2E38;
+            --ok:#3DD68C; --warn:#F5A524; --bad:#F2555A; --unk:#8C93A1; --accent:#8FD16A; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:18px 14px 40px; }
+  header { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:12px; }
+  .firma { font-weight:700; font-size:18px; color:var(--accent); }
+  .titel { color:var(--muted); font-size:14px; text-align:right; }
+  .karte { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px; }
+  .modell { font-size:22px; font-weight:700; }
+  .sn { font-size:20px; font-weight:700; letter-spacing:.5px; margin-top:2px; word-break:break-all; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; margin:10px 0 0; }
+  dt { color:var(--muted); } dd { margin:0; font-weight:600; text-align:right; }
+  .zeile { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+  .zeile:first-child { border-top:none; padding-top:0; } .zeile:last-child { padding-bottom:0; }
+  .name { font-weight:600; } .detail { color:var(--muted); font-size:14px; }
+  .badge { flex:none; color:#fff; border-radius:999px; padding:3px 11px; font-size:14px; font-weight:700; }
+  .o { background:var(--ok); } .w { background:var(--warn); } .b { background:var(--bad); } .u { background:var(--unk); }
+  h2 { font-size:15px; margin:0 0 8px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+  .hinweis { color:var(--muted); font-size:13px; }
+  .leer { text-align:center; padding:40px 10px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main id="app"><div class="leer">Bericht wird geladen …</div></main>
+<script>
+(function () {
+  "use strict";
+  var WORT = { o: "In Ordnung", w: "Hinweis", b: "Auffällig", u: "Nicht verfügbar" };
+  var app = document.getElementById("app");
+
+  function dec(s) {
+    try { return decodeURIComponent(String(s || "").replace(/\+/g, " ")); } catch (e) { return String(s || ""); }
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  // Ergebnisfeld: "" = nicht geprüft, sonst Status (o/w/b/u) und nach einem Doppelpunkt die auffälligen Bauteile
+  function ergebnis(feld) {
+    if (!feld) return null;
+    var i = feld.indexOf(":");
+    var code = (i < 0 ? feld : feld.slice(0, i)).charAt(0);
+    var probleme = i < 0 ? [] : feld.slice(i + 1).split(",").map(dec).filter(Boolean);
+    return { code: WORT[code] ? code : "u", probleme: probleme };
+  }
+  function parse(hash) {
+    var p = String(hash || "").replace(/^#/, "").split("~");
+    if (p.length < 12 || p[0] !== "1") return null;
+    return {
+      sn: dec(p[1]), modell: dec(p[2]), datum: dec(p[3]), akku: p[4], zyklen: p[5], aktivierung: dec(p[6]),
+      hw: ergebnis(p[7]), si: ergebnis(p[8]), lt: ergebnis(p[9]), auftrag: dec(p[10]), firma: dec(p[11])
+    };
+  }
+  function zeile(name, r, leerText) {
+    var z = el("div", "zeile"), l = el("div");
+    l.appendChild(el("div", "name", name));
+    var b;
+    if (!r) {
+      l.appendChild(el("div", "detail", leerText || "Nicht geprüft"));
+      b = el("span", "badge u", "–");
+    } else {
+      if (r.probleme.length) l.appendChild(el("div", "detail", r.probleme.join(", ")));
+      b = el("span", "badge " + r.code, WORT[r.code]);
+    }
+    z.appendChild(l); z.appendChild(b);
+    return z;
+  }
+  function render() {
+    var d = parse(location.hash);
+    app.textContent = "";
+    if (!d) {
+      var leer = el("div", "leer");
+      leer.appendChild(el("div", "", "Kein Bericht in dieser Adresse."));
+      leer.appendChild(el("div", "hinweis", "Diese Seite zeigt den Prüfbericht, der im QR-Code auf dem Etikett steckt."));
+      app.appendChild(leer);
+      return;
+    }
+    document.title = "Prüfbericht " + d.sn;
+    var head = el("header");
+    head.appendChild(el("div", "firma", d.firma || "Prüfbericht"));
+    head.appendChild(el("div", "titel", "Prüfbericht " + d.datum));
+    app.appendChild(head);
+
+    var geraet = el("div", "karte");
+    geraet.appendChild(el("div", "modell", d.modell || "Gerät"));
+    geraet.appendChild(el("div", "sn", "SN " + d.sn));
+    var dl = el("dl");
+    function paar(k, v) { if (v) { dl.appendChild(el("dt", "", k)); dl.appendChild(el("dd", "", v)); } }
+    paar("Auftrag", d.auftrag);
+    paar("Akku", d.akku ? d.akku + " % Gesundheit" + (d.zyklen ? ", " + d.zyklen + " Zyklen" : "") : "");
+    paar("Aktivierung", d.aktivierung);
+    geraet.appendChild(dl);
+    app.appendChild(geraet);
+
+    var erg = el("div", "karte");
+    erg.appendChild(el("h2", "", "Ergebnisse"));
+    erg.appendChild(zeile("Hardware", d.hw));
+    erg.appendChild(zeile("Sicherheit", d.si));
+    erg.appendChild(zeile("Ladetest", d.lt));
+    app.appendChild(erg);
+
+    app.appendChild(el("p", "hinweis",
+      "Dieser Bericht beruht auf den Daten, die das Gerät beim Auslesen gemeldet hat. Display, Kameras, Lautsprecher, " +
+      "Tasten und Funk sind nicht Teil davon. Der Sicherheits-Check ist kein Virenscanner. Ob die Aktivierungssperre " +
+      "(„Wo ist?“) eingeschaltet ist, lässt sich nicht auslesen und ist am Gerät zu prüfen."));
+    app.appendChild(el("p", "hinweis",
+      "Der Bericht steht im Link des QR-Codes und wird nicht auf einem Server gespeichert. Erstellt mit Birnen-Tool."));
+  }
+  window.addEventListener("hashchange", render);
+  render();
+})();
+</script>
+</body>
+</html>
