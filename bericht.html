@@ -70,7 +70,8 @@
     if (p.length < 12 || p[0] !== "1") return null;
     return {
       sn: dec(p[1]), modell: dec(p[2]), datum: dec(p[3]), akku: p[4], zyklen: p[5], aktivierung: dec(p[6]),
-      hw: ergebnis(p[7]), si: ergebnis(p[8]), lt: ergebnis(p[9]), auftrag: dec(p[10]), firma: dec(p[11])
+      hw: ergebnis(p[7]), si: ergebnis(p[8]), lt: ergebnis(p[9]), auftrag: dec(p[10]), firma: dec(p[11]),
+      fn: p.length > 12 ? ergebnis(p[12]) : null
     };
   }
   function zeile(name, r, leerText) {
@@ -119,6 +120,7 @@
     erg.appendChild(zeile("Hardware", d.hw));
     erg.appendChild(zeile("Sicherheit", d.si));
     erg.appendChild(zeile("Ladetest", d.lt));
+    if (d.fn) erg.appendChild(zeile("Funktionstest", d.fn));
     app.appendChild(erg);
 
     app.appendChild(el("p", "hinweis",

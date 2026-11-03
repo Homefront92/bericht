@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Funktionstest</title>
+<!--
+  Birnen-Tool: Funktionstest. Eine einzelne Datei ohne externe Inhalte, zum Öffnen in Safari auf dem zu prüfenden Gerät.
+  Alles läuft lokal im Browser. Kamera, Mikrofon, Bewegung und Standort werden nur für den jeweiligen Test benutzt;
+  es wird nichts aufgenommen, gespeichert oder gesendet. Das Ergebnis ist ein kurzer Code, den man im Programm eintippt.
+  SPDX-License-Identifier: GPL-3.0-or-later  ·  Copyright (C) 2026 Niclas Syma
+-->
+<style>
+  :root { --bg:#F4F5F8; --card:#FFFFFF; --text:#1A1D24; --muted:#6A7280; --line:#DFE3EA;
+          --ok:#1E9E5A; --bad:#D64545; --unk:#7A8290; --accent:#3C7A1C; --btn:#2F6FDE; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161B; --card:#1B1E25; --text:#EDEFF4; --muted:#9AA1AF; --line:#2A2E38;
+            --ok:#3DD68C; --bad:#F2555A; --unk:#8C93A1; --accent:#8FD16A; --btn:#4C8DFF; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { overflow-x:hidden; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:16px 14px 60px; }
+  h1 { font-size:22px; margin:6px 0 2px; } .muted { color:var(--muted); font-size:14px; }
+  .karte { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin:10px 0; }
+  .test { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
+  .test:first-child { border-top:none; padding-top:0; } .test:last-child { padding-bottom:0; }
+  .test .n { font-weight:600; } .test .s { color:var(--muted); font-size:13px; }
+  .badge { flex:none; color:#fff; border-radius:999px; padding:1px 9px; font-size:12px; font-weight:700; margin-right:7px; background:var(--unk); display:inline-block; }
+  .badge.o { background:var(--ok); } .badge.f { background:var(--bad); }
+  button { font:inherit; border:none; border-radius:10px; padding:10px 16px; background:var(--btn); color:#fff; font-weight:600; cursor:pointer; }
+  .test button { flex:none; width:92px; padding:10px 4px; }
+  button.zweit { background:transparent; color:var(--btn); border:1px solid var(--btn); }
+  button.ok { background:var(--ok); } button.fehler { background:var(--bad); } button.grau { background:var(--unk); }
+  .code { font:700 34px/1.2 ui-monospace,Menlo,Consolas,monospace; letter-spacing:4px; text-align:center; padding:10px 0; }
+  #panel { position:fixed; inset:0; background:var(--bg); z-index:10; display:none; flex-direction:column; }
+  #panel.an { display:flex; }
+  #kopf { padding:calc(10px + env(safe-area-inset-top)) 14px 8px; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+  #inhalt { flex:1; overflow:auto; padding:0 14px 10px; }
+  #leiste { display:flex; gap:8px; padding:10px 14px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--card); }
+  #leiste button { flex:1; }
+  #voll { position:fixed; inset:0; z-index:20; display:none; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #voll.an { display:block; }
+  #voll .hinweis { position:absolute; left:0; right:0; bottom:calc(14px + env(safe-area-inset-bottom)); text-align:center; font-weight:700;
+                   text-shadow:0 0 4px #000, 0 0 4px #fff; color:#888; pointer-events:none; }
+  #raster { position:absolute; inset:0; display:grid; touch-action:none; background:#444; }
+  #raster div { background:#555; border:1px solid #333; }
+  #raster div.x { background:#2ecc71; }
+  #zaehler { position:absolute; left:0; right:0; top:calc(8px + env(safe-area-inset-top)); text-align:center; color:#fff; font-weight:700; pointer-events:none; text-shadow:0 0 4px #000; }
+  video { width:100%; max-height:55vh; background:#000; border-radius:12px; }
+  .meter { height:18px; border-radius:9px; background:var(--line); overflow:hidden; } .meter i { display:block; height:100%; width:0; background:var(--ok); }
+  select { font:inherit; width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  pre { white-space:pre-wrap; font-size:13px; margin:6px 0; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div id="panel"><div id="kopf"><span id="titel"></span><button class="zweit" id="zu">Schließen</button></div><div id="inhalt"></div>
+  <div id="leiste"><button class="ok" id="bOk">In Ordnung</button><button class="fehler" id="bFehler">Fehler</button><button class="grau" id="bSkip">Nicht möglich</button></div></div>
+<div id="voll"></div>
+<script>
+(function () {
+  "use strict";
+  // Ergebniswerte je Test: 0 nicht geprüft, 1 in Ordnung, 2 Fehler, 3 nicht möglich
+  var WORT = ["Offen", "In Ordnung", "Fehler", "Nicht möglich"], KLASSE = ["", "o", "f", ""];
+  var ALPHA = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  var app = document.getElementById("app"), panel = document.getElementById("panel"), voll = document.getElementById("voll");
+  var results = [];
+  var aufraeumen = null, aktuell = -1;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function api(name) { try { return !!name(); } catch (e) { return false; } }
+
+  /* ---------- Code: 12 Tests x 2 Bit = 24 Bit -> 5 Zeichen (5 Bit je Zeichen) + 1 Prüfzeichen ---------- */
+  function encode(res) {
+    var n = 0, i, chars = [];
+    for (i = 0; i < 12; i++) n = (n << 2) | ((res[i] || 0) & 3);
+    n = n << 1;
+    for (i = 4; i >= 0; i--) chars.push((n >> (5 * i)) & 31);
+    var chk = 0;
+    for (i = 0; i < 5; i++) chk += chars[i] * (i + 3);
+    chars.push(chk % 32);
+    var s = chars.map(function (v) { return ALPHA.charAt(v); }).join("");
+    return s.slice(0, 3) + "-" + s.slice(3);
+  }
+
+  /* ---------- Tests ---------- */
+  var TESTS = [
+    { name: "Display: Farben und Pixel", kurz: "Tote Pixel, Flecken, Streifen, Verfärbung", run: runDisplay, voll: true },
+    { name: "Touch: ganzer Bildschirm", kurz: "Alle Felder mit dem Finger überstreichen", run: runTouch, voll: true },
+    { name: "Mehrfinger-Touch", kurz: "Fünf Finger gleichzeitig", run: runMulti, voll: true },
+    { name: "Hauptkamera", kurz: "Bild scharf, ohne Flecken", run: function (p) { runCamera(p, "environment"); } },
+    { name: "Frontkamera", kurz: "Bild scharf, ohne Flecken", run: function (p) { runCamera(p, "user"); } },
+    { name: "Mikrofon", kurz: "Pegel bewegt sich beim Sprechen", run: runMic },
+    { name: "Lautsprecher", kurz: "Töne links, rechts und beide", run: runSpeaker },
+    { name: "Bewegungssensoren", kurz: "Werte ändern sich beim Kippen", run: runMotion },
+    { name: "Standort (GPS)", kurz: "Position wird ermittelt", run: runGps },
+    { name: "Tasten", kurz: "Lauter, Leiser, Seitentaste, Stummschalter", run: manuell("Drücke nacheinander Lauter, Leiser und die Seitentaste (kurz) und stelle den Stummschalter bzw. die Aktionstaste um. Reagieren alle Tasten sauber, ohne Haken oder Doppelauslösung?") },
+    { name: "Vibration", kurz: "Vibration ist spürbar", run: manuell("Löse eine Vibration aus, zum Beispiel unter Einstellungen > Töne & Haptik einen Klingelton antippen oder den Stummschalter umlegen. Ist die Vibration deutlich spürbar?") },
+    { name: "Face ID / Touch ID", kurz: "Entsperren funktioniert", run: manuell("Sperre das Gerät und entsperre es mit Face ID bzw. Touch ID. Funktioniert es zuverlässig? Gibt es das Gerät ohne Biometrie, wähle „Nicht möglich“.") }
+  ];
+
+  function manuell(text) {
+    return function (p) { p.inhalt.appendChild(el("p", "", text)); };
+  }
+
+  /* ---------- Panel (mit Ergebnis-Tasten) ---------- */
+  function oeffnen(i) {
+    var t = TESTS[i];
+    aktuell = i;
+    if (t.voll) {
+      voll.textContent = ""; voll.className = "an";
+      t.run({ voll: voll, fertig: function (r) { schliessen(r); } });
+      return;
+    }
+    var inhalt = document.getElementById("inhalt");
+    inhalt.textContent = "";
+    document.getElementById("titel").textContent = t.name;
+    panel.className = "an";
+    inhalt.appendChild(el("p", "muted", t.kurz));
+    t.run({ inhalt: inhalt });
+  }
+  function schliessen(r) {
+    if (aufraeumen) { try { aufraeumen(); } catch (e) {} aufraeumen = null; }
+    panel.className = ""; voll.className = ""; voll.textContent = "";
+    if (typeof r === "number" && aktuell >= 0) { results[aktuell] = r; speichern(); }
+    aktuell = -1; zeichnen();
+  }
+  document.getElementById("bOk").onclick = function () { schliessen(1); };
+  document.getElementById("bFehler").onclick = function () { schliessen(2); };
+  document.getElementById("bSkip").onclick = function () { schliessen(3); };
+  document.getElementById("zu").onclick = function () { schliessen(); };
+
+  /* ---------- Display ---------- */
+  function runDisplay(p) {
+    var farben = ["#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff", "#808080", "linear-gradient(90deg,#000,#fff)"], i = 0, v = p.voll;
+    var hinweis = el("div", "hinweis", "");
+    v.appendChild(hinweis);
+    function zeige() {
+      v.style.background = farben[i];
+      hinweis.textContent = (i + 1) + " / " + farben.length + " · Tippen zum Weiterschalten";
+    }
+    zeige();
+    v.onclick = function () {
+      i++;
+      if (i >= farben.length) { v.onclick = null; fragen(p, "Display ohne Fehler?"); return; }
+      zeige();
+    };
+  }
+  function fragen(p, text) {
+    var v = p.voll; v.textContent = ""; v.style.background = "var(--bg)"; v.style.color = "var(--text)";
+    var box = el("div", ""); box.style.cssText = "position:absolute;left:0;right:0;top:30%;padding:20px;text-align:center";
+    box.appendChild(el("p", "", text));
+    var a = el("button", "ok", "In Ordnung"), b = el("button", "fehler", "Fehler"), c = el("button", "grau", "Nicht möglich");
+    [a, b, c].forEach(function (x) { x.style.margin = "6px"; box.appendChild(x); });
+    a.onclick = function () { p.fertig(1); }; b.onclick = function () { p.fertig(2); }; c.onclick = function () { p.fertig(3); };
+    v.appendChild(box);
+  }
+
+  /* ---------- Touch-Raster ---------- */
+  function runTouch(p) {
+    var v = p.voll, cols = 7, rows = Math.max(8, Math.round(cols * window.innerHeight / window.innerWidth));
+    v.style.background = "#444";
+    var g = el("div"); g.id = "raster"; g.style.gridTemplateColumns = "repeat(" + cols + ",1fr)"; g.style.gridTemplateRows = "repeat(" + rows + ",1fr)";
+    var cells = [];
+    for (var i = 0; i < cols * rows; i++) { var d = el("div"); cells.push(d); g.appendChild(d); }
+    v.appendChild(g);
+    var z = el("div"); z.id = "zaehler"; v.appendChild(z);
+    var done = 0;
+    function mark(x, y) {
+      var e = document.elementFromPoint(x, y);
+      if (e && e.parentNode === g && !e.classList.contains("x")) { e.classList.add("x"); done++; z.textContent = "Felder: " + done + " / " + cells.length; if (done === cells.length) fragen(p, "Alle Felder reagiert. Touch in Ordnung?"); }
+    }
+    z.textContent = "Felder: 0 / " + cells.length + " · mit dem Finger überstreichen";
+    function ev(e) { e.preventDefault(); for (var k = 0; k < e.touches.length; k++) mark(e.touches[k].clientX, e.touches[k].clientY); }
+    g.addEventListener("touchstart", ev, { passive: false }); g.addEventListener("touchmove", ev, { passive: false });
+    g.addEventListener("mousemove", function (e) { if (e.buttons) mark(e.clientX, e.clientY); });
+    var ende = el("button", "grau", "Beenden"); ende.style.cssText = "position:absolute;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3";
+    ende.onclick = function () { fragen(p, "Touch beendet. Waren Felder tot oder verzögert?"); };
+    v.appendChild(ende);
+  }
+
+  /* ---------- Mehrfinger ---------- */
+  function runMulti(p) {
+    var v = p.voll, max = 0; v.style.background = "#223";
+    var t = el("div"); t.style.cssText = "position:absolute;left:0;right:0;top:35%;text-align:center;color:#fff;font:700 22px -apple-system,sans-serif;padding:0 20px";
+    t.textContent = "Lege fünf Finger gleichzeitig auf den Bildschirm";
+    var n = el("div"); n.style.cssText = "font-size:64px;margin-top:10px"; n.textContent = "0"; t.appendChild(n); v.appendChild(t);
+    var weiter = el("button", "grau", "Fertig"); weiter.style.cssText = "position:absolute;right:10px;bottom:calc(10px + env(safe-area-inset-bottom))";
+    weiter.onclick = function () { fragen(p, "Gleichzeitig erkannt: " + max + " Finger. In Ordnung?"); };
+    v.appendChild(weiter);
+    v.addEventListener("touchstart", function (e) { e.preventDefault(); if (e.touches.length > max) { max = e.touches.length; n.textContent = String(max); } }, { passive: false });
+  }
+
+  /* ---------- Kamera ---------- */
+  function runCamera(p, facing) {
+    var inhalt = p.inhalt, video = el("video"); video.setAttribute("playsinline", ""); video.muted = true; video.autoplay = true;
+    var info = el("p", "muted", "Kamera wird gestartet … bitte den Zugriff erlauben."), sel = el("select");
+    inhalt.appendChild(video); inhalt.appendChild(info); sel.style.display = "none"; inhalt.appendChild(sel);
+    var stream = null;
+    function stop() { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    aufraeumen = stop;
+    if (!api(function () { return navigator.mediaDevices.getUserMedia; })) { info.textContent = "Dieser Browser erlaubt keinen Kamerazugriff (Seite muss per https geöffnet sein)."; return; }
+    function start(deviceId) {
+      stop();
+      var c = deviceId ? { video: { deviceId: { exact: deviceId } }, audio: false } : { video: { facingMode: { ideal: facing } }, audio: false };
+      navigator.mediaDevices.getUserMedia(c).then(function (s) {
+        stream = s; video.srcObject = s; var st = s.getVideoTracks()[0].getSettings();
+        info.textContent = "Läuft" + (st.width ? " (" + st.width + "×" + st.height + ")" : "") + ". Ist das Bild scharf, ohne Flecken, Streifen oder Verfärbung? Teste auch das Antippen zum Scharfstellen.";
+        return navigator.mediaDevices.enumerateDevices();
+      }).then(function (devs) {
+        var cams = devs.filter(function (d) { return d.kind === "videoinput"; });
+        if (cams.length > 1 && !deviceId) {
+          sel.textContent = ""; sel.style.display = "block";
+          cams.forEach(function (d, i) { var o = el("option", "", d.label || ("Kamera " + (i + 1))); o.value = d.deviceId; sel.appendChild(o); });
+          sel.onchange = function () { start(sel.value); };
+        }
+      }).catch(function (e) { info.textContent = "Kein Zugriff: " + (e && e.name ? e.name : e) + ". Zugriff in den Einstellungen erlauben oder „Nicht möglich“ wählen."; });
+    }
+    start();
+  }
+
+  /* ---------- Mikrofon ---------- */
+  function runMic(p) {
+    var inhalt = p.inhalt, info = el("p", "muted", "Bitte den Zugriff erlauben und ins Mikrofon sprechen."), m = el("div", "meter"), bar = el("i"); m.appendChild(bar);
+    inhalt.appendChild(info); inhalt.appendChild(m);
+    var stream = null, ctx = null, raf = 0, max = 0;
+    aufraeumen = function () { cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); if (ctx && ctx.close) ctx.close(); };
+    if (!api(function () { return navigator.mediaDevices.getUserMedia; })) { info.textContent = "Dieser Browser erlaubt keinen Mikrofonzugriff (Seite muss per https geöffnet sein)."; return; }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+      stream = s; var AC = window.AudioContext || window.webkitAudioContext; ctx = new AC(); if (ctx.resume) ctx.resume();
+      var an = ctx.createAnalyser(); an.fftSize = 512; ctx.createMediaStreamSource(s).connect(an);
+      var buf = new Uint8Array(an.fftSize);
+      (function tick() {
+        an.getByteTimeDomainData(buf); var peak = 0;
+        for (var i = 0; i < buf.length; i++) { var d = Math.abs(buf[i] - 128) / 128; if (d > peak) peak = d; }
+        if (peak > max) max = peak; bar.style.width = Math.min(100, peak * 140) + "%";
+        info.textContent = "Höchster Pegel: " + Math.round(max * 100) + " %. Sprich oder klopfe leicht ans Gerät. Bewegt sich die Anzeige?";
+        raf = requestAnimationFrame(tick);
+      })();
+      if (window.MediaRecorder) {
+        var rec = el("button", "zweit", "3 Sekunden aufnehmen und abspielen"); rec.style.marginTop = "12px"; inhalt.appendChild(rec);
+        var audio = el("audio"); audio.controls = true; audio.style.cssText = "width:100%;margin-top:10px"; inhalt.appendChild(audio);
+        rec.onclick = function () {
+          var chunks = [], r; try { r = new MediaRecorder(stream); } catch (e) { rec.textContent = "Aufnahme nicht möglich"; return; }
+          r.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+          r.onstop = function () { audio.src = URL.createObjectURL(new Blob(chunks, { type: r.mimeType || "audio/mp4" })); audio.play().catch(function () {}); rec.textContent = "Nochmal aufnehmen"; };
+          rec.textContent = "Aufnahme läuft …"; r.start(); setTimeout(function () { if (r.state !== "inactive") r.stop(); }, 3000);
+        };
+      }
+    }).catch(function (e) { info.textContent = "Kein Zugriff: " + (e && e.name ? e.name : e) + ". Zugriff erlauben oder „Nicht möglich“ wählen."; });
+  }
+
+  /* ---------- Lautsprecher: erzeugte WAV-Datei in einem Audio-Element (läuft auch mit Stummschalter) ---------- */
+  function wav(freq, secs, links, rechts) {
+    var rate = 22050, n = Math.floor(rate * secs), buf = new ArrayBuffer(44 + n * 4), dv = new DataView(buf), i;
+    function s(o, t) { for (var k = 0; k < t.length; k++) dv.setUint8(o + k, t.charCodeAt(k)); }
+    s(0, "RIFF"); dv.setUint32(4, 36 + n * 4, true); s(8, "WAVE"); s(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+    dv.setUint32(24, rate, true); dv.setUint32(28, rate * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); s(36, "data"); dv.setUint32(40, n * 4, true);
+    for (i = 0; i < n; i++) {
+      var env = Math.min(1, i / 800, (n - i) / 800), v = Math.sin(2 * Math.PI * freq * i / rate) * 0.6 * env * 32767;
+      dv.setInt16(44 + i * 4, links ? v : 0, true); dv.setInt16(46 + i * 4, rechts ? v : 0, true);
+    }
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+  function runSpeaker(p) {
+    var inhalt = p.inhalt, urls = [];
+    inhalt.appendChild(el("p", "", "Lautstärke aufdrehen. Spiele die Töne ab: Sind sie klar, ohne Knistern, Rauschen oder Verzerrung zu hören?"));
+    [["Ton links", 440, 1, 0], ["Ton rechts", 660, 0, 1], ["Beide Seiten", 880, 1, 1], ["Tiefer Ton", 120, 1, 1], ["Hoher Ton", 4000, 1, 1]].forEach(function (d) {
+      var b = el("button", "zweit", d[0]); b.style.cssText = "display:block;width:100%;margin:6px 0";
+      b.onclick = function () { var u = wav(d[1], 1.4, d[2], d[3]); urls.push(u); var a = new Audio(u); a.play().catch(function () { b.textContent = d[0] + " (Abspielen nicht erlaubt)"; }); };
+      inhalt.appendChild(b);
+    });
+    inhalt.appendChild(el("p", "muted", "Hinweis: Bei vielen Geräten kommen „links“ und „rechts“ aus demselben Lautsprecher. Dann gelten nur die Klarheit und die Lautstärke."));
+    aufraeumen = function () { urls.forEach(function (u) { URL.revokeObjectURL(u); }); };
+  }
+
+  /* ---------- Bewegungssensoren ---------- */
+  function runMotion(p) {
+    var inhalt = p.inhalt, out = el("pre", "", "Bewegungssensoren werden gestartet …"), range = { b: [999, -999], g: [999, -999] }, acc = 0;
+    inhalt.appendChild(out);
+    function update(b, g) { if (b != null) { range.b = [Math.min(range.b[0], b), Math.max(range.b[1], b)]; } if (g != null) { range.g = [Math.min(range.g[0], g), Math.max(range.g[1], g)]; } }
+    function show(extra) {
+      out.textContent = "Neigung vor/zurück: " + (range.b[0] < 900 ? Math.round(range.b[0]) + "° bis " + Math.round(range.b[1]) + "°" : "–") +
+        "\nNeigung links/rechts: " + (range.g[0] < 900 ? Math.round(range.g[0]) + "° bis " + Math.round(range.g[1]) + "°" : "–") +
+        "\nBeschleunigung (höchster Wert): " + acc.toFixed(1) + " m/s²\n\nKippe und drehe das Gerät. Ändern sich die Werte?" + (extra || "");
+    }
+    function lauschen() {
+      function o(e) { update(e.beta, e.gamma); show(); } function m(e) { var a = e.accelerationIncludingGravity; if (a) { var v = Math.sqrt((a.x || 0) * (a.x || 0) + (a.y || 0) * (a.y || 0) + (a.z || 0) * (a.z || 0)); if (v > acc) acc = v; show(); } }
+      window.addEventListener("deviceorientation", o); window.addEventListener("devicemotion", m);
+      aufraeumen = function () { window.removeEventListener("deviceorientation", o); window.removeEventListener("devicemotion", m); };
+      show("");
+    }
+    if (!("DeviceOrientationEvent" in window) && !("DeviceMotionEvent" in window)) { out.textContent = "Dieser Browser meldet keine Bewegungssensoren."; return; }
+    var need = window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === "function";
+    if (need) {
+      var b = el("button", "", "Zugriff erlauben und starten"); inhalt.insertBefore(b, out);
+      b.onclick = function () { DeviceMotionEvent.requestPermission().then(function (r) { if (r === "granted") { b.remove(); lauschen(); } else out.textContent = "Zugriff abgelehnt. In Safari-Einstellungen erlauben oder „Nicht möglich“ wählen."; }).catch(function (e) { out.textContent = "Fehler: " + e; }); };
+    } else { lauschen(); }
+  }
+
+  /* ---------- GPS ---------- */
+  function runGps(p) {
+    var inhalt = p.inhalt, out = el("p", "", "Standort wird ermittelt … bitte den Zugriff erlauben. Am besten am Fenster oder im Freien.");
+    inhalt.appendChild(out);
+    if (!navigator.geolocation) { out.textContent = "Dieser Browser meldet keinen Standort."; return; }
+    var t0 = Date.now();
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      out.textContent = "Position ermittelt nach " + Math.round((Date.now() - t0) / 1000) + " s, Genauigkeit etwa " + Math.round(pos.coords.accuracy) + " m. (Die Koordinaten werden nicht angezeigt oder gespeichert.)";
+    }, function (e) { out.textContent = "Keine Position: " + (e.message || e.code) + ". Innen kann das normal sein. Zugriff erlauben, draußen erneut testen oder „Nicht möglich“ wählen."; },
+    { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 });
+  }
+
+  /* ---------- Übersicht ---------- */
+  function speichern() { try { sessionStorage.setItem("ft", JSON.stringify(results)); } catch (e) {} }
+  function laden() { try { var r = JSON.parse(sessionStorage.getItem("ft") || "[]"); if (r.length === 12) results = r; } catch (e) {} while (results.length < 12) results.push(0); }
+  function ios() { var m = /OS (\d+)[_.](\d+)/.exec(navigator.userAgent); return m ? "iOS " + m[1] + "." + m[2] : ""; }
+  function zeichnen() {
+    app.textContent = "";
+    app.appendChild(el("h1", "", "Funktionstest"));
+    app.appendChild(el("p", "muted", "Öffne diese Seite in Safari auf dem Gerät, das geprüft wird. Führe die Tests nacheinander aus und tippe das Ergebnis unten im Programm ein. Nichts wird aufgenommen, gespeichert oder gesendet."));
+    var info = el("div", "karte muted", [ios(), screen.width + "×" + screen.height + " Punkte", "Faktor " + (window.devicePixelRatio || 1), api(function () { return window.isSecureContext; }) ? "sichere Verbindung" : "KEINE sichere Verbindung (Kamera, Mikrofon, Sensoren gehen nur über https)"].filter(Boolean).join(" · "));
+    app.appendChild(info);
+    var karte = el("div", "karte");
+    TESTS.forEach(function (t, i) {
+      var z = el("div", "test"), l = el("div"); l.style.minWidth = "0"; l.appendChild(el("div", "n", t.name));
+      var sub = el("div", "s"); sub.appendChild(el("span", "badge " + KLASSE[results[i]], WORT[results[i]])); sub.appendChild(document.createTextNode(t.kurz));
+      l.appendChild(sub);
+      var b = el("button", results[i] ? "zweit" : "", results[i] ? "Nochmal" : "Start"); b.onclick = function () { oeffnen(i); };
+      z.appendChild(l); z.appendChild(b); karte.appendChild(z);
+    });
+    app.appendChild(karte);
+    var code = encode(results), k2 = el("div", "karte");
+    k2.appendChild(el("div", "muted", "Ergebnis-Code für das Programm"));
+    k2.appendChild(el("div", "code", code));
+    var kopie = el("button", "", "Code kopieren"); kopie.onclick = function () {
+      function ok() { kopie.textContent = "Kopiert"; setTimeout(function () { kopie.textContent = "Code kopieren"; }, 1500); }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(ok, function () {}); else { try { var t = el("textarea"); t.value = code; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); ok(); } catch (e) {} }
+    };
+    var neu = el("button", "zweit", "Alles zurücksetzen"); neu.style.marginLeft = "8px"; neu.onclick = function () { results = results.map(function () { return 0; }); speichern(); zeichnen(); };
+    k2.appendChild(kopie); k2.appendChild(neu);
+    app.appendChild(k2);
+    app.appendChild(el("p", "muted", "Nicht prüfbar mit Safari: Mobilfunk/SIM, WLAN und Bluetooth, Ladebuchse, Blitz bzw. Taschenlampe, Wasserschäden. Dafür bleibt das Prüfprotokoll."));
+  }
+  laden(); zeichnen();
+  window.__ft = { encode: encode, TESTS: TESTS, set: function (r) { results = r; zeichnen(); } };   // für Tests
+})();
+</script>
+</body>
+</html>
