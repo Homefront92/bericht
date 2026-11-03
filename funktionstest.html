@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Funktionstest">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>Funktionstest</title>
@@ -20,9 +24,12 @@
             --ok:#3DD68C; --bad:#F2555A; --unk:#8C93A1; --accent:#8FD16A; --btn:#4C8DFF; }
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html, body { overflow-x:hidden; }
+  html, body { overflow-x:hidden; overscroll-behavior:none; }
+  .hinweiskarte { border-color:var(--btn); }
+  .hinweiskarte b { color:var(--btn); }
+  #voll .rand { position:absolute; pointer-events:none; }
   body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 -apple-system,"Segoe UI",Roboto,Arial,sans-serif; }
-  main { max-width:640px; margin:0 auto; padding:16px 14px 60px; }
+  main { max-width:640px; margin:0 auto; padding:calc(16px + env(safe-area-inset-top)) 14px calc(60px + env(safe-area-inset-bottom)); }
   h1 { font-size:22px; margin:6px 0 2px; } .muted { color:var(--muted); font-size:14px; }
   .karte { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin:10px 0; }
   .test { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-top:1px solid var(--line); }
@@ -43,8 +50,8 @@
   #leiste button { flex:1; }
   #voll { position:fixed; inset:0; z-index:20; display:none; touch-action:none; user-select:none; -webkit-user-select:none; }
   #voll.an { display:block; }
-  #voll .hinweis { position:absolute; left:0; right:0; bottom:calc(14px + env(safe-area-inset-bottom)); text-align:center; font-weight:700;
-                   text-shadow:0 0 4px #000, 0 0 4px #fff; color:#888; pointer-events:none; }
+  #voll .hinweis { position:absolute; left:10px; right:10px; bottom:calc(14px + env(safe-area-inset-bottom)); text-align:center; font-weight:600;
+                   font-size:14px; background:rgba(0,0,0,.72); color:#fff; padding:8px 12px; border-radius:10px; pointer-events:none; }
   #raster { position:absolute; inset:0; display:grid; touch-action:none; background:#444; }
   #raster div { background:#555; border:1px solid #333; }
   #raster div.x { background:#2ecc71; }
@@ -84,6 +91,20 @@
     chars.push(chk % 32);
     var s = chars.map(function (v) { return ALPHA.charAt(v); }).join("");
     return s.slice(0, 3) + "-" + s.slice(3);
+  }
+
+  /* ---------- Vollbild und Abdeckung ---------- */
+  function standalone() {
+    return window.navigator.standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  }
+  // Anteil der Bildschirmfläche, den die Seite gerade belegt (ohne Adress- und Werkzeugleiste von Safari)
+  function abdeckung() {
+    var a = window.innerWidth * window.innerHeight, b = screen.width * screen.height;
+    return b > 0 ? Math.min(100, Math.round(100 * a / b)) : null;
+  }
+  function abdeckungText() {
+    var ab = abdeckung();
+    return ab !== null && ab < 99 ? "Nur " + ab + " % der Bildschirmfläche (nicht im Vollbild)" : "";
   }
 
   /* ---------- Tests ---------- */
@@ -135,13 +156,24 @@
 
   /* ---------- Display ---------- */
   function runDisplay(p) {
-    var farben = ["#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff", "#808080", "linear-gradient(90deg,#000,#fff)"], i = 0, v = p.voll;
+    var farben = ["#ffffff", "#000000", "#ff0000", "#00ff00", "#0000ff", "#808080", "linear-gradient(90deg,#000,#fff)", "RAND"], i = 0, v = p.voll;
     var hinweis = el("div", "hinweis", "");
-    v.appendChild(hinweis);
-    function zeige() {
-      v.style.background = farben[i];
-      hinweis.textContent = (i + 1) + " / " + farben.length + " · Tippen zum Weiterschalten";
+    var rand = [];
+    function randLeisten() {   // vier farbige Linien ganz am Rand: Sind alle vier und die Ecken zu sehen?
+      var f = [["top:0;left:0;right:0;height:5px;background:#f00"], ["bottom:0;left:0;right:0;height:5px;background:#00f"],
+               ["top:0;bottom:0;left:0;width:5px;background:#0a0"], ["top:0;bottom:0;right:0;width:5px;background:#f0f"]];
+      f.forEach(function (c) { var d = el("div", "rand"); d.style.cssText = c[0]; v.appendChild(d); rand.push(d); });
     }
+    function zeige() {
+      rand.forEach(function (d) { d.remove(); }); rand = [];
+      v.style.background = farben[i] === "RAND" ? "#fff" : farben[i];
+      if (farben[i] === "RAND") randLeisten();
+      var teile = [(i + 1) + " / " + farben.length + " · Tippen zum Weiterschalten"];
+      if (farben[i] === "RAND") teile.unshift("Randtest: oben rot, unten blau, links grün, rechts lila. Alle vier bis in die Ecken sichtbar?");
+      var ab = abdeckungText(); if (ab) teile.push(ab);
+      hinweis.textContent = teile.join(" · ");
+    }
+    v.appendChild(hinweis);
     zeige();
     v.onclick = function () {
       i++;
@@ -153,6 +185,8 @@
     var v = p.voll; v.textContent = ""; v.style.background = "var(--bg)"; v.style.color = "var(--text)";
     var box = el("div", ""); box.style.cssText = "position:absolute;left:0;right:0;top:30%;padding:20px;text-align:center";
     box.appendChild(el("p", "", text));
+    var ab = abdeckung();
+    if (ab !== null && ab < 99) box.appendChild(el("p", "muted", "Getestet wurden nur " + ab + " % der Bildschirmfläche, weil die Seite nicht im Vollbild läuft. Für den ganzen Bildschirm die Seite vom Home-Bildschirm aus öffnen (siehe Hinweis oben auf der Startseite)."));
     var a = el("button", "ok", "In Ordnung"), b = el("button", "fehler", "Fehler"), c = el("button", "grau", "Nicht möglich");
     [a, b, c].forEach(function (x) { x.style.margin = "6px"; box.appendChild(x); });
     a.onclick = function () { p.fertig(1); }; b.onclick = function () { p.fertig(2); }; c.onclick = function () { p.fertig(3); };
@@ -178,7 +212,15 @@
     g.addEventListener("touchstart", ev, { passive: false }); g.addEventListener("touchmove", ev, { passive: false });
     g.addEventListener("mousemove", function (e) { if (e.buttons) mark(e.clientX, e.clientY); });
     var ende = el("button", "grau", "Beenden"); ende.style.cssText = "position:absolute;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:3";
-    ende.onclick = function () { fragen(p, "Touch beendet. Waren Felder tot oder verzögert?"); };
+    var stufe = 0;
+    ende.onclick = function () {
+      if (stufe === 0 && done < cells.length) {   // erst die Felder zeigen, die nicht reagiert haben
+        cells.forEach(function (c) { if (!c.classList.contains("x")) c.style.background = "#c0392b"; });
+        z.textContent = "Rot: nicht reagiert (" + (cells.length - done) + "). Am äußersten Rand schluckt iOS Berührungen für Systemgesten.";
+        ende.textContent = "Weiter"; stufe = 1; return;
+      }
+      fragen(p, "Touch beendet. Waren Felder tot oder verzögert (nicht nur am äußersten Rand)?");
+    };
     v.appendChild(ende);
   }
 
@@ -191,7 +233,12 @@
     var weiter = el("button", "grau", "Fertig"); weiter.style.cssText = "position:absolute;right:10px;bottom:calc(10px + env(safe-area-inset-bottom))";
     weiter.onclick = function () { fragen(p, "Gleichzeitig erkannt: " + max + " Finger. In Ordnung?"); };
     v.appendChild(weiter);
-    v.addEventListener("touchstart", function (e) { e.preventDefault(); if (e.touches.length > max) { max = e.touches.length; n.textContent = String(max); } }, { passive: false });
+    v.addEventListener("touchstart", function (e) {
+      // Knöpfe müssen klickbar bleiben: preventDefault würde auf dem iPhone ihren Klick unterdrücken
+      if (e.target && e.target.closest && e.target.closest("button")) return;
+      e.preventDefault();
+      if (e.touches.length > max) { max = e.touches.length; n.textContent = String(max); }
+    }, { passive: false });
   }
 
   /* ---------- Kamera ---------- */
@@ -323,6 +370,15 @@
     app.appendChild(el("p", "muted", "Öffne diese Seite in Safari auf dem Gerät, das geprüft wird. Führe die Tests nacheinander aus und tippe das Ergebnis unten im Programm ein. Nichts wird aufgenommen, gespeichert oder gesendet."));
     var info = el("div", "karte muted", [ios(), screen.width + "×" + screen.height + " Punkte", "Faktor " + (window.devicePixelRatio || 1), api(function () { return window.isSecureContext; }) ? "sichere Verbindung" : "KEINE sichere Verbindung (Kamera, Mikrofon, Sensoren gehen nur über https)"].filter(Boolean).join(" · "));
     app.appendChild(info);
+    var vb = el("div", "karte hinweiskarte");
+    if (standalone()) {
+      vb.appendChild(el("b", "", "Vollbild aktiv. "));
+      vb.appendChild(document.createTextNode("Display- und Touch-Test erfassen den ganzen Bildschirm, bis auf die Rundungen der Ecken und die Aussparung der Kamera."));
+    } else {
+      vb.appendChild(el("b", "", "Für den GANZEN Bildschirm als App starten. "));
+      vb.appendChild(document.createTextNode("In Safari ist oben die Adressleiste und unten die Werkzeugleiste sichtbar: Diese Bereiche würden nicht getestet. So geht es: unten auf Teilen tippen, „Zum Home-Bildschirm“ wählen, Hinzufügen. Dann das neue Symbol auf dem Home-Bildschirm öffnen (ohne Adressleiste). Die Tests laufen dort genauso."));
+    }
+    app.appendChild(vb);
     var karte = el("div", "karte");
     TESTS.forEach(function (t, i) {
       var z = el("div", "test"), l = el("div"); l.style.minWidth = "0"; l.appendChild(el("div", "n", t.name));
